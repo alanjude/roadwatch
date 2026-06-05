@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RoadWatch — U.S. Road Condition Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #161920;
+    --surface2: #1e2230;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f2f7;
+    --muted: #7c8399;
+    --accent: #e84c1e;
+    --accent2: #ff6b3d;
+    --green: #22d48a;
+    --yellow: #f5c842;
+    --red: #e84c1e;
+    --blue: #3d8ef0;
+    --purple: #9b7ef8;
+    --r: 8px;
+    --r-lg: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); }
+
+  /* HEADER */
+  header {
+    position: fixed; top: 0; left: 0; right: 0; height: 56px;
+    display: flex; align-items: center; gap: 14px; padding: 0 16px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    z-index: 200;
+  }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: 2px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; }
+
+  .search-wrap { position: relative; flex: 1; max-width: 380px; }
+  #pac-input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 8px 14px 8px 34px;
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px;
+    outline: none; transition: border-color .2s;
+  }
+  #pac-input:focus { border-color: var(--border2); }
+  #pac-input::placeholder { color: var(--muted); }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
+
+  .filter-row { display: flex; gap: 7px; align-items: center; flex: 1; overflow-x: auto; }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-chip {
+    display: flex; align-items: center; gap: 5px; padding: 5px 11px;
+    border-radius: 999px; border: 1px solid var(--border); background: var(--surface2);
+    font-size: 12px; font-weight: 500; cursor: pointer; transition: all .18s;
+    white-space: nowrap; color: var(--muted); user-select: none; flex-shrink: 0;
+  }
+  .filter-chip:hover { border-color: var(--border2); color: var(--text); }
+  .filter-chip.active { border-color: var(--accent); color: var(--accent2); background: rgba(232,76,30,0.1); }
+  .chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  .btn { padding: 8px 16px; border-radius: var(--r); border: 1px solid var(--accent); background: var(--accent); color: white; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .2s; white-space: nowrap; }
+  .btn:hover { opacity: .85; }
+  .btn.outline { background: transparent; color: var(--accent2); }
+  .btn.outline:hover { background: rgba(232,76,30,0.1); }
+
+  /* LAYOUT */
+  .app-body { display: flex; height: 100vh; padding-top: 56px; }
+
+  /* SIDEBAR */
+  .sidebar { width: 330px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; transition: width .28s cubic-bezier(.4,0,.2,1), min-width .28s cubic-bezier(.4,0,.2,1); min-width: 330px; }
+  .sidebar.collapsed { width: 0; min-width: 0; border-right: none; }
+  .sidebar.collapsed .sidebar-tabs,
+  .sidebar.collapsed .sidebar-content { opacity: 0; pointer-events: none; }
+  .sidebar-tabs, .sidebar-content { transition: opacity .15s; }
+
+  /* SIDEBAR TOGGLE */
+  .sidebar-toggle { position: absolute; top: 50%; left: 0; transform: translateY(-50%); z-index: 30; width: 20px; height: 52px; background: var(--surface); border: 1px solid var(--border); border-left: none; border-radius: 0 var(--r) var(--r) 0; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); font-size: 11px; transition: left .28s cubic-bezier(.4,0,.2,1), color .18s, background .18s; user-select: none; }
+  .sidebar-toggle:hover { color: var(--text); background: var(--surface2); }
+  .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .tab { flex: 1; padding: 11px 0; text-align: center; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .18s; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .sidebar-content { flex: 1; overflow-y: auto; padding: 10px; }
+  .sidebar-content::-webkit-scrollbar { width: 3px; }
+  .sidebar-content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  .section-hdr { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); font-weight: 700; padding: 8px 4px 6px; }
+
+  /* REPORT CARDS */
+  .report-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 13px; margin-bottom: 9px; cursor: pointer; transition: border-color .18s; }
+  .report-card:hover { border-color: var(--border2); }
+  .report-card.selected { border-color: var(--accent); }
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+  .card-title { font-size: 13px; font-weight: 600; line-height: 1.35; flex: 1; }
+  .severity-badge { padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; flex-shrink: 0; }
+  .sev-critical { background: rgba(232,76,30,.2); color: #ff6b3d; }
+  .sev-high { background: rgba(245,200,66,.15); color: #f5c842; }
+  .sev-moderate { background: rgba(61,142,240,.15); color: #3d8ef0; }
+  .sev-low { background: rgba(34,212,138,.15); color: #22d48a; }
+  .sev-scenic { background: rgba(155,126,248,.15); color: #9b7ef8; }
+  .card-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .meta-tag { font-size: 11px; color: var(--muted); }
+  .source-badge { font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; padding: 2px 6px; border-radius: 4px; background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+  .card-vehicle-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .vehicle-tag { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); font-size: 11px; font-weight: 500; color: var(--muted); }
+  .vt-offroad { border-color: rgba(34,212,138,.4); color: var(--green); }
+  .vt-sports { border-color: rgba(155,126,248,.4); color: var(--purple); }
+  .vt-avoid { border-color: rgba(232,76,30,.4); color: var(--accent2); }
+  .vt-caution { border-color: rgba(245,200,66,.4); color: var(--yellow); }
+  .card-rating { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 12px; color: var(--muted); }
+  .stars { color: var(--yellow); letter-spacing: 1px; }
+
+  /* DATA SOURCES */
+  .source-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: var(--r); margin-bottom: 6px; background: var(--surface2); border: 1px solid var(--border); }
+  .source-info { display: flex; align-items: center; gap: 10px; }
+  .source-icon { width: 32px; height: 32px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .source-name { font-size: 13px; font-weight: 600; }
+  .source-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .source-status { font-size: 10px; padding: 3px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .status-live { background: rgba(34,212,138,.15); color: var(--green); }
+  .status-planned { background: rgba(245,200,66,.15); color: var(--yellow); }
+
+  /* MAP */
+  #map { flex: 1; height: 100%; }
+
+  /* MAP OVERLAY */
+  .map-area { flex: 1; position: relative; }
+
+  .map-legend { position: absolute; bottom: 30px; right: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 16px; z-index: 10; min-width: 175px; }
+  .legend-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; margin-bottom: 9px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .map-stats { position: absolute; top: 12px; left: 12px; display: flex; gap: 7px; z-index: 10; }
+  .stat-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; font-size: 12px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .stat-num { font-family: 'DM Mono', monospace; font-weight: 600; }
+
+  .map-ctrl-col { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 7px; z-index: 10; }
+  .map-ctrl-btn { width: 36px; height: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); font-size: 15px; transition: all .18s; user-select: none; }
+  .map-ctrl-btn:hover { color: var(--text); border-color: var(--border2); }
+  .map-ctrl-btn.active { color: var(--accent2); border-color: var(--accent); background: rgba(232,76,30,0.1); }
+
+  /* DETAIL PANEL */
+  .detail-panel { position: absolute; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); padding: 18px 20px; transform: translateY(100%); transition: transform .3s cubic-bezier(.25,.46,.45,.94); z-index: 50; }
+  .detail-panel.open { transform: translateY(0); }
+  .detail-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .detail-name { font-size: 17px; font-weight: 600; margin-bottom: 3px; }
+  .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .detail-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .close-btn { width: 28px; height: 28px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); font-size: 14px; transition: all .18s; flex-shrink: 0; }
+  .close-btn:hover { color: var(--text); }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; pointer-events: none; transition: opacity .25s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--r-lg); padding: 26px; width: 510px; max-height: 88vh; overflow-y: auto; transform: translateY(14px); transition: transform .25s; }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal::-webkit-scrollbar { width: 3px; }
+  .modal::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 1.5px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 7px; }
+  .form-input, .form-select, .form-textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 13px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; outline: none; transition: border-color .18s; }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--border2); }
+  .form-input::placeholder, .form-textarea::placeholder { color: var(--muted); }
+  .form-select option { background: var(--surface2); }
+  .form-textarea { resize: vertical; min-height: 75px; }
+  .vehicle-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+  .vehicle-option { padding: 9px 6px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface2); text-align: center; cursor: pointer; transition: all .18s; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .vehicle-option:hover { border-color: var(--border2); color: var(--text); }
+  .vehicle-option.selected { border-color: var(--accent); color: var(--accent2); background: rgba(232,76,30,0.1); }
+  .vehicle-option .v-icon { font-size: 19px; display: block; margin-bottom: 3px; }
+  .rec-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 7px; }
+  .rec-option { padding: 11px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface2); cursor: pointer; transition: all .18s; }
+  .rec-option:hover { border-color: var(--border2); }
+  .rec-option.sel-go { border-color: var(--green); background: rgba(34,212,138,.08); }
+  .rec-option.sel-avoid { border-color: var(--red); background: rgba(232,76,30,.08); }
+  .rec-option.sel-caution { border-color: var(--yellow); background: rgba(245,200,66,.08); }
+  .rec-option.sel-scenic { border-color: var(--purple); background: rgba(155,126,248,.08); }
+  .rec-label { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .rec-desc { font-size: 11px; color: var(--muted); }
+  .sev-row { display: flex; gap: 7px; }
+  .sev-btn { flex: 1; padding: 7px 4px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface2); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; cursor: pointer; text-align: center; transition: all .18s; color: var(--muted); }
+  .sev-btn:hover { border-color: var(--border2); }
+  .sev-btn.ac-critical { border-color: var(--red); color: var(--red); background: rgba(232,76,30,.1); }
+  .sev-btn.ac-high { border-color: var(--yellow); color: var(--yellow); background: rgba(245,200,66,.08); }
+  .sev-btn.ac-moderate { border-color: var(--blue); color: var(--blue); background: rgba(61,142,240,.08); }
+  .sev-btn.ac-low { border-color: var(--green); color: var(--green); background: rgba(34,212,138,.08); }
+  .star-input { display: flex; gap: 3px; }
+  .star-btn { font-size: 22px; cursor: pointer; color: var(--border2); transition: color .12s; background: none; border: none; padding: 0; line-height: 1; }
+  .star-btn.active { color: var(--yellow); }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid var(--border2); border-radius: 999px; padding: 9px 20px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; z-index: 2000; transition: transform .3s cubic-bezier(.34,1.56,.64,1); white-space: nowrap; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .t-icon { color: var(--green); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 2s infinite; }
+
+  /* Google autocomplete dropdown dark */
+  .pac-container { background: var(--surface2) !important; border: 1px solid var(--border2) !important; border-radius: var(--r) !important; box-shadow: 0 8px 32px rgba(0,0,0,.5) !important; font-family: 'DM Sans', sans-serif !important; margin-top: 4px; }
+  .pac-item { color: var(--text) !important; border-top: 1px solid var(--border) !important; padding: 8px 12px !important; cursor: pointer; font-size: 13px !important; }
+  .pac-item:hover, .pac-item-selected { background: var(--surface) !important; }
+  .pac-item-query { color: var(--text) !important; font-size: 13px !important; }
+  .pac-matched { color: var(--accent2) !important; }
+  .pac-icon { display: none !important; }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-dot"></span>RoadWatch</div>
+  <div class="search-wrap">
+    <span class="search-icon">⌕</span>
+    <input id="pac-input" type="text" placeholder="Search city, highway, road...">
+  </div>
+  <div class="filter-row">
+    <div class="filter-chip active" data-filter="all"><span class="chip-dot" style="background:#888"></span>All</div>
+    <div class="filter-chip" data-filter="pothole"><span class="chip-dot" style="background:var(--red)"></span>Potholes</div>
+    <div class="filter-chip" data-filter="construction"><span class="chip-dot" style="background:var(--yellow)"></span>Construction</div>
+    <div class="filter-chip" data-filter="scenic"><span class="chip-dot" style="background:var(--purple)"></span>Scenic</div>
+    <div class="filter-chip" data-filter="offroad"><span class="chip-dot" style="background:var(--green)"></span>Off-Road</div>
+    <div class="filter-chip" data-filter="heatmap" id="heatmapChip"><span class="chip-dot" style="background:var(--accent2)"></span>Heatmap</div>
+  </div>
+  <button class="btn" id="reportBtn">+ Report Road</button>
+</header>
+
+<div class="app-body">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <div class="tab active" data-tab="reports">Reports</div>
+      <div class="tab" data-tab="sources">Sources</div>
+      <div class="tab" data-tab="stats">Stats</div>
+    </div>
+    <div class="sidebar-content" id="sidebarContent">
+
+      <div id="reportsTab">
+        <div class="section-hdr">Recent · <span style="color:var(--green)"><span class="live-dot"></span> Live</span></div>
+        <!-- Cards injected by JS -->
+      </div>
+
+      <div id="sourcesTab" style="display:none">
+        <div class="section-hdr">Live Data Pipelines</div>
+        <div class="source-item"><div class="source-info"><div class="source-icon" style="background:rgba(61,142,240,.15);color:var(--blue)">G</div><div><div class="source-name">Google Maps API</div><div class="source-desc">Base map, routing, places</div></div></div><span class="source-status status-live">Live</span></div>
+        <div class="source-item"><div class="source-info"><div class="source-icon" style="background:rgba(232,76,30,.15);color:var(--accent2)">W</div><div><div class="source-name">Waze CCP</div><div class="source-desc">Real-time hazard reports</div></div></div><span class="source-status status-live">Live</span></div>
+        <div class="source-item"><div class="source-info"><div class="source-icon" style="background:rgba(34,212,240,.12);color:#22d4f0;font-size:10px">311</div><div><div class="source-name">City 311 Systems</div><div class="source-desc">NYC, Chicago, LA, Houston + 40 cities</div></div></div><span class="source-status status-live">Live</span></div>
+        <div class="source-item"><div class="source-info"><div class="source-icon" style="background:rgba(245,200,66,.12);color:var(--yellow);font-size:10px">DOT</div><div><div class="source-name">State DOT Feeds</div><div class="source-desc">TX, CA, NY, IL, FL, MD + 28 states</div></div></div><span class="source-status status-live">Live</span></div>
+        <div class="source-item"><div class="source-info"><div class="source-icon" style="background:rgba(155,126,248,.12);color:var(--purple);font-size:10px">BLM</div><div><div class="source-name">BLM / Forest Service</div><div class="source-desc">Off-road trail conditions</div></div></div><span class="source-status status-live">Live</span></div>
+        <div class="source-item"><div class="source-info"><div class="source-icon" style="background:rgba(34,212,138,.12);color:var(--green);font-size:10px">OHV</div><div><div class="source-name">OHV / Trail Communities</div><div class="source-desc">4x4Wire, Trails Offroad, iOverlander</div></div></div><span class="source-status status-planned">Planned</span></div>
+        <div class="source-item"><div class="source-info"><div class="source-icon" style="background:rgba(61,142,240,.12);color:var(--blue);font-size:9px">FHWA</div><div><div class="source-name">FHWA HPMS Dataset</div><div class="source-desc">National road quality index</div></div></div><span class="source-status status-live">Live</span></div>
+      </div>
+
+      <div id="statsTab" style="display:none">
+        <div class="section-hdr">Platform Stats</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Total Reports</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:600">48,293</div></div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Active Issues</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:600;color:var(--red)">1,847</div></div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Cities Covered</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:600;color:var(--blue)">312</div></div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Contributors</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:600;color:var(--green)">9,412</div></div>
+        </div>
+        <div class="section-hdr">Worst States (IRI Score)</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px" id="stateChart"></div>
+        <div class="section-hdr" style="margin-top:12px">Reports by Vehicle Type</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px" id="vehicleChart"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MAP AREA -->
+  <div class="map-area">
+    <div class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">&#8249;</div>
+    <div id="map"></div>
+
+    <div class="map-stats">
+      <div class="stat-pill"><span class="live-dot"></span><span class="stat-num">1,847</span> active issues</div>
+      <div class="stat-pill"><span style="color:var(--red)">●</span><span class="stat-num">312</span> critical</div>
+    </div>
+
+    <div class="map-ctrl-col">
+      <div class="map-ctrl-btn" title="Zoom in" onclick="map.setZoom(map.getZoom()+1)">+</div>
+      <div class="map-ctrl-btn" title="Zoom out" onclick="map.setZoom(map.getZoom()-1)">−</div>
+      <div class="map-ctrl-btn" title="My location" onclick="goToMyLocation()">◎</div>
+      <div class="map-ctrl-btn" title="Satellite" id="satelliteBtn" onclick="toggleSatellite(this)">🛰</div>
+    </div>
+
+    <div class="map-legend">
+      <div class="legend-title">Road Conditions</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Critical / Potholes</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div>High / Construction</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Moderate Issues</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Off-Road Friendly</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>Scenic / Spirited</div>
+    </div>
+
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-top">
+        <div>
+          <div class="detail-name" id="dpName">—</div>
+          <div style="font-size:12px;color:var(--muted)" id="dpMeta">—</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="severity-badge" id="dpSev">—</span>
+          <div class="close-btn" onclick="closeDetail()">✕</div>
+        </div>
+      </div>
+      <div class="detail-tags" id="dpTags"></div>
+      <div class="detail-actions">
+        <button class="btn outline" onclick="openReviewModal()">+ Add Review</button>
+        <button class="btn outline" onclick="getDirections()">Get Directions</button>
+        <button class="btn outline" onclick="shareReport()">Share</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Report Road Condition</div>
+      <div class="close-btn" onclick="closeModal()">✕</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Location / Road Name</label>
+      <input type="text" class="form-input" placeholder="e.g. I-45 South between Main St and Beltway 8" id="locationInput">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Issue Type</label>
+      <select class="form-select" id="issueType">
+        <option value="">Select issue type...</option>
+        <option>Pothole — Minor (&lt;3")</option>
+        <option>Pothole — Major (3"–6")</option>
+        <option>Pothole — Critical (&gt;6" / Tire Hazard)</option>
+        <option>Road Heave / Buckling</option>
+        <option>Sinkhole / Subsidence</option>
+        <option>Construction Zone</option>
+        <option>Gravel / Loose Surface</option>
+        <option>Water / Flooding</option>
+        <option>Off-Road Trail</option>
+        <option>Scenic Route — Spirited Driving</option>
+        <option>Scenic Route — Overlook / Photo</option>
+        <option>Other Hazard</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Severity</label>
+      <div class="sev-row">
+        <div class="sev-btn" onclick="selectSev(this,'critical')">Critical</div>
+        <div class="sev-btn" onclick="selectSev(this,'high')">High</div>
+        <div class="sev-btn" onclick="selectSev(this,'moderate')">Moderate</div>
+        <div class="sev-btn" onclick="selectSev(this,'low')">Low</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Your Vehicle Type</label>
+      <div class="vehicle-grid">
+        <div class="vehicle-option" onclick="selectVehicle(this)"><span class="v-icon">🚗</span>Sedan</div>
+        <div class="vehicle-option" onclick="selectVehicle(this)"><span class="v-icon">🏎️</span>Sports Car</div>
+        <div class="vehicle-option" onclick="selectVehicle(this)"><span class="v-icon">🚙</span>SUV / CUV</div>
+        <div class="vehicle-option" onclick="selectVehicle(this)"><span class="v-icon">🛻</span>Truck / 4x4</div>
+        <div class="vehicle-option" onclick="selectVehicle(this)"><span class="v-icon">🏍️</span>Motorcycle</div>
+        <div class="vehicle-option" onclick="selectVehicle(this)"><span class="v-icon">🚌</span>RV / Large</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Vehicle Recommendation</label>
+      <div class="rec-grid">
+        <div class="rec-option" onclick="selectRec(this,'go')"><div class="rec-label" style="color:var(--green)">✓ Recommended</div><div class="rec-desc">Road is suitable for this vehicle type</div></div>
+        <div class="rec-option" onclick="selectRec(this,'caution')"><div class="rec-label" style="color:var(--yellow)">⚡ Caution</div><div class="rec-desc">Passable but take it slow</div></div>
+        <div class="rec-option" onclick="selectRec(this,'avoid')"><div class="rec-label" style="color:var(--red)">✗ Avoid</div><div class="rec-desc">High risk of damage for this vehicle</div></div>
+        <div class="rec-option" onclick="selectRec(this,'scenic')"><div class="rec-label" style="color:var(--purple)">✦ Scenic / Fun</div><div class="rec-desc">Great road for spirited driving</div></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Road Quality Rating</label>
+      <div class="star-input">
+        <button class="star-btn" onclick="setRating(1)">★</button>
+        <button class="star-btn" onclick="setRating(2)">★</button>
+        <button class="star-btn" onclick="setRating(3)">★</button>
+        <button class="star-btn" onclick="setRating(4)">★</button>
+        <button class="star-btn" onclick="setRating(5)">★</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px">1 = Terrible · 5 = Excellent</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" placeholder="Describe the condition, hazard details, what lane, etc." id="descInput"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">
+      <button class="btn outline" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="submitReport()">Submit Report</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span class="t-icon">✓</span><span id="toastMsg">Done</span></div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────────
+const REPORTS = [
+  { id:1, name:"I-45 South — Sink Failures", city:"Houston, TX", source:"TxDOT", ago:"2h ago",
+    sev:"Critical", sevClass:"sev-critical", pinColor:"#e84c1e",
+    lat:29.7355, lng:-95.4150,
+    tags:["⚠ Avoid — Low Clearance","✓ 4x4 Passable"], tagClasses:["vt-avoid","vt-offroad"],
+    stars:"★★★★☆", rating:"4.2", reports:38, filter:"pothole" },
+  { id:2, name:"US-1 Baltimore — Pothole Cluster", city:"Baltimore, MD", source:"311 Data", ago:"45m ago",
+    sev:"High", sevClass:"sev-high", pinColor:"#f5c842",
+    lat:39.2904, lng:-76.6122,
+    tags:["⚠ Avoid — Sports Cars","⚡ Caution — Sedans"], tagClasses:["vt-avoid","vt-caution"],
+    stars:"★★★☆☆", rating:"3.1", reports:22, filter:"pothole" },
+  { id:3, name:"PCH Malibu — Scenic Drive", city:"Malibu, CA", source:"Community", ago:"3h ago",
+    sev:"Scenic", sevClass:"sev-scenic", pinColor:"#9b7ef8",
+    lat:34.0259, lng:-118.7798,
+    tags:["✓ Sports Cars","✓ Motorcycles"], tagClasses:["vt-sports","vt-sports"],
+    stars:"★★★★★", rating:"4.9", reports:167, filter:"scenic" },
+  { id:4, name:"Moab — Sand Flats Rd", city:"Moab, UT", source:"BLM + Community", ago:"1d ago",
+    sev:"Off-Road", sevClass:"sev-scenic", pinColor:"#22d48a",
+    lat:38.5733, lng:-109.5498,
+    tags:["✓ 4WD Required","✗ No 2WD"], tagClasses:["vt-offroad","vt-avoid"],
+    stars:"★★★★★", rating:"4.8", reports:94, filter:"offroad" },
+  { id:5, name:"Michigan Ave Chicago — Rutting", city:"Chicago, IL", source:"CDOT + 311", ago:"6h ago",
+    sev:"High", sevClass:"sev-high", pinColor:"#f5c842",
+    lat:41.8781, lng:-87.6298,
+    tags:["⚠ Avoid — Modified Lows","⚡ Slow — All"], tagClasses:["vt-avoid","vt-caution"],
+    stars:"★★★☆☆", rating:"3.4", reports:51, filter:"pothole" },
+  { id:6, name:"Tail of the Dragon — US-129", city:"Deal's Gap, NC", source:"Community", ago:"5h ago",
+    sev:"Scenic", sevClass:"sev-scenic", pinColor:"#9b7ef8",
+    lat:35.4676, lng:-83.9271,
+    tags:["✓ Sports Cars + Bikes","✗ No RVs/Trucks"], tagClasses:["vt-sports","vt-avoid"],
+    stars:"★★★★★", rating:"5.0", reports:342, filter:"scenic" },
+  { id:7, name:"I-94 Detroit — Surface Failure", city:"Detroit, MI", source:"MDOT", ago:"1h ago",
+    sev:"Critical", sevClass:"sev-critical", pinColor:"#e84c1e",
+    lat:42.3314, lng:-83.0458,
+    tags:["⚠ Avoid — All Vehicles","✓ Report to MDOT"], tagClasses:["vt-avoid","vt-caution"],
+    stars:"★★☆☆☆", rating:"2.1", reports:77, filter:"pothole" },
+  { id:8, name:"Angeles Crest Hwy — Canyon Run", city:"Los Angeles, CA", source:"Community", ago:"4h ago",
+    sev:"Scenic", sevClass:"sev-scenic", pinColor:"#9b7ef8",
+    lat:34.2519, lng:-117.9987,
+    tags:["✓ Sports Cars","✓ Motorcycles","⚠ Tight Switchbacks"], tagClasses:["vt-sports","vt-sports","vt-caution"],
+    stars:"★★★★★", rating:"4.7", reports:203, filter:"scenic" },
+  { id:9, name:"I-10 New Orleans — Subsidence", city:"New Orleans, LA", source:"LADOT + 311", ago:"30m ago",
+    sev:"High", sevClass:"sev-high", pinColor:"#f5c842",
+    lat:29.9511, lng:-90.0715,
+    tags:["⚡ Caution — All","⚠ Truck Lane Only Safe"], tagClasses:["vt-caution","vt-avoid"],
+    stars:"★★★☆☆", rating:"2.8", reports:44, filter:"pothole" },
+  { id:10, name:"Rubicon Trail — Eldorado NF", city:"Georgetown, CA", source:"BLM", ago:"2d ago",
+    sev:"Off-Road", sevClass:"sev-scenic", pinColor:"#22d48a",
+    lat:38.9896, lng:-120.4297,
+    tags:["✓ Extreme 4WD Only","✗ Stock Vehicles"], tagClasses:["vt-offroad","vt-avoid"],
+    stars:"★★★★★", rating:"5.0", reports:189, filter:"offroad" },
+];
+
+// Heatmap weight data — lat/lng/weight tuples
+const HEATMAP_DATA_RAW = [
+  [29.74,-95.42,0.9],[39.29,-76.61,0.7],[41.88,-87.63,0.8],[42.33,-83.05,0.95],
+  [29.95,-90.07,0.65],[40.71,-74.00,0.85],[39.95,-75.17,0.75],[38.89,-77.03,0.6],
+  [33.45,-112.07,0.5],[47.60,-122.33,0.45],[45.52,-122.68,0.55],[32.78,-96.80,0.6],
+  [30.27,-97.74,0.5],[36.17,-86.78,0.55],[35.23,-80.84,0.5],[30.33,-81.66,0.4],
+  [25.77,-80.19,0.45],[32.08,-81.10,0.4],[43.05,-76.15,0.55],[42.36,-71.06,0.8],
+  [41.76,-72.67,0.7],[41.82,-71.41,0.75],[44.31,-69.78,0.5],[43.22,-71.55,0.45],
+];
+
+let map, heatmapLayer, markers = [], activeFilter = 'all', currentReport = null;
+let isSatellite = false, heatmapOn = false, currentRating = 0;
+
+// ─── MAP INIT ────────────────────────────────────────────────────────────────
+function initMap() {
+  const darkStyles = [
+    {elementType:"geometry",stylers:[{color:"#1a1d2e"}]},
+    {elementType:"labels.text.stroke",stylers:[{color:"#0d0f14"}]},
+    {elementType:"labels.text.fill",stylers:[{color:"#7c8399"}]},
+    {featureType:"administrative.locality",elementType:"labels.text.fill",stylers:[{color:"#aeb6cc"}]},
+    {featureType:"poi",stylers:[{visibility:"off"}]},
+    {featureType:"road",elementType:"geometry",stylers:[{color:"#262b3d"}]},
+    {featureType:"road",elementType:"geometry.stroke",stylers:[{color:"#1a1d2e"}]},
+    {featureType:"road",elementType:"labels.text.fill",stylers:[{color:"#6b7280"}]},
+    {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#2d3348"}]},
+    {featureType:"road.highway",elementType:"geometry.stroke",stylers:[{color:"#1f2335"}]},
+    {featureType:"road.highway",elementType:"labels.text.fill",stylers:[{color:"#9ca3af"}]},
+    {featureType:"transit",stylers:[{visibility:"off"}]},
+    {featureType:"water",elementType:"geometry",stylers:[{color:"#0d1117"}]},
+    {featureType:"water",elementType:"labels.text.fill",stylers:[{color:"#3b82f6"}]},
+  ];
+
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 38.5, lng: -96.0 },
+    zoom: 5,
+    styles: darkStyles,
+    disableDefaultUI: true,
+    gestureHandling: 'greedy',
+  });
+
+  // Places autocomplete
+  const input = document.getElementById('pac-input');
+  const autocomplete = new google.maps.places.Autocomplete(input, {
+    types: ['geocode','establishment'],
+    componentRestrictions: { country: 'us' },
+  });
+  autocomplete.bindTo('bounds', map);
+  autocomplete.addListener('place_changed', () => {
+    const place = autocomplete.getPlace();
+    if (!place.geometry) return;
+    if (place.geometry.viewport) map.fitBounds(place.geometry.viewport);
+    else { map.setCenter(place.geometry.location); map.setZoom(14); }
+  });
+
+  // Click-to-report
+  map.addListener('click', e => {
+    document.getElementById('locationInput').value = `${e.latLng.lat().toFixed(5)}, ${e.latLng.lng().toFixed(5)}`;
+    openModal();
+  });
+
+  // Heatmap layer
+  const heatData = HEATMAP_DATA_RAW.map(d => ({
+    location: new google.maps.LatLng(d[0], d[1]),
+    weight: d[2]
+  }));
+  heatmapLayer = new google.maps.visualization.HeatmapLayer({
+    data: heatData,
+    map: null,
+    radius: 40,
+    opacity: 0.75,
+    gradient: [
+      'rgba(0,0,0,0)',
+      'rgba(61,142,240,0.6)',
+      'rgba(245,200,66,0.8)',
+      'rgba(232,76,30,0.9)',
+      'rgba(255,50,0,1)',
+    ]
+  });
+
+  plotMarkers();
+  renderCards();
+}
+
+// ─── MARKERS ────────────────────────────────────────────────────────────────
+function makeSvgPin(color) {
+  return {
+    path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: 'rgba(0,0,0,0.35)',
+    strokeWeight: 1.5,
+    scale: 1.8,
+    anchor: new google.maps.Point(12, 22),
+  };
+}
+
+function plotMarkers(filter) {
+  markers.forEach(m => m.setMap(null));
+  markers = [];
+  const active = filter || activeFilter;
+  REPORTS.forEach(r => {
+    if (active !== 'all' && r.filter !== active) return;
+    const marker = new google.maps.Marker({
+      position: { lat: r.lat, lng: r.lng },
+      map,
+      title: r.name,
+      icon: makeSvgPin(r.pinColor),
+      optimized: true,
+    });
+    marker.addListener('click', () => openDetail(r.id));
+    markers.push(marker);
+  });
+}
+
+// ─── SIDEBAR CARDS ───────────────────────────────────────────────────────────
+function renderCards(filter) {
+  const active = filter || activeFilter;
+  const tab = document.getElementById('reportsTab');
+  const hdr = tab.querySelector('.section-hdr') || (() => {
+    const d = document.createElement('div'); d.className = 'section-hdr'; tab.prepend(d); return d;
+  })();
+
+  // Remove old cards
+  tab.querySelectorAll('.report-card').forEach(c => c.remove());
+
+  const filtered = active === 'all' ? REPORTS : REPORTS.filter(r => r.filter === active);
+  filtered.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'report-card' + (currentReport === r.id ? ' selected' : '');
+    card.dataset.id = r.id;
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="card-title">${r.name}</div>
+        <span class="severity-badge ${r.sevClass}">${r.sev}</span>
+      </div>
+      <div class="card-meta">
+        <span class="meta-tag">📍 ${r.city}</span>
+        <span class="meta-tag">⏱ ${r.ago}</span>
+        <span class="source-badge">${r.source}</span>
+      </div>
+      <div class="card-vehicle-tags">${r.tags.map((t,i)=>`<span class="vehicle-tag ${r.tagClasses[i]}">${t}</span>`).join('')}</div>
+      <div class="card-rating"><span class="stars">${r.stars}</span><span>${r.rating} · ${r.reports} reports</span></div>
+    `;
+    card.addEventListener('click', () => openDetail(r.id));
+    tab.appendChild(card);
+  });
+}
+
+// ─── DETAIL PANEL ────────────────────────────────────────────────────────────
+function openDetail(id) {
+  currentReport = id;
+  const r = REPORTS.find(x => x.id === id);
+  document.getElementById('dpName').textContent = r.name;
+  document.getElementById('dpMeta').textContent = `${r.city} · ${r.source} · ${r.ago}`;
+  const sev = document.getElementById('dpSev');
+  sev.textContent = r.sev; sev.className = 'severity-badge ' + r.sevClass;
+  document.getElementById('dpTags').innerHTML = r.tags.map((t,i)=>`<span class="vehicle-tag ${r.tagClasses[i]}">${t}</span>`).join('');
+  document.getElementById('detailPanel').classList.add('open');
+  document.querySelectorAll('.report-card').forEach(c => c.classList.remove('selected'));
+  const card = document.querySelector(`[data-id="${id}"]`);
+  if (card) { card.classList.add('selected'); card.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  map.panTo({ lat: r.lat, lng: r.lng });
+  if (map.getZoom() < 10) map.setZoom(11);
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  currentReport = null;
+}
+
+function getDirections() {
+  if (!currentReport) return;
+  const r = REPORTS.find(x => x.id === currentReport);
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lng}`, '_blank');
+}
+
+function shareReport() {
+  if (!currentReport) return;
+  const r = REPORTS.find(x => x.id === currentReport);
+  const url = `https://www.google.com/maps/@${r.lat},${r.lng},15z`;
+  navigator.clipboard.writeText(url).then(() => showToast('Map link copied to clipboard'));
+}
+
+// ─── CONTROLS ────────────────────────────────────────────────────────────────
+function goToMyLocation() {
+  if (!navigator.geolocation) { showToast('Geolocation not supported'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    map.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    map.setZoom(13);
+    new google.maps.Marker({
+      position: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+      map,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor:'#3d8ef0', fillOpacity:1, strokeColor:'white', strokeWeight:2 },
+      title: 'Your Location'
+    });
+  }, () => showToast('Could not get your location'));
+}
+
+function toggleSatellite(btn) {
+  isSatellite = !isSatellite;
+  map.setMapTypeId(isSatellite ? 'hybrid' : 'roadmap');
+  if (!isSatellite) map.setOptions({ styles: map.__darkStyles });
+  btn.classList.toggle('active', isSatellite);
+}
+
+// Filters
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const f = chip.dataset.filter;
+    if (f === 'heatmap') {
+      heatmapOn = !heatmapOn;
+      heatmapLayer.setMap(heatmapOn ? map : null);
+      chip.classList.toggle('active', heatmapOn);
+      showToast(heatmapOn ? 'Heatmap enabled' : 'Heatmap off');
+      return;
+    }
+    document.querySelectorAll('.filter-chip:not([data-filter="heatmap"])').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    activeFilter = f;
+    plotMarkers(f);
+    renderCards(f);
+  });
+});
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const w = tab.dataset.tab;
+    document.getElementById('reportsTab').style.display = w === 'reports' ? 'block' : 'none';
+    document.getElementById('sourcesTab').style.display = w === 'sources' ? 'block' : 'none';
+    document.getElementById('statsTab').style.display = w === 'stats' ? 'block' : 'none';
+    if (w === 'stats') renderCharts();
+  });
+});
+
+// ─── MODAL ───────────────────────────────────────────────────────────────────
+document.getElementById('reportBtn').addEventListener('click', openModal);
+function openModal() { document.getElementById('modalOverlay').classList.add('open'); }
+function openReviewModal() { closeDetail(); setTimeout(openModal, 200); }
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+document.getElementById('modalOverlay').addEventListener('click', e => { if (e.target === document.getElementById('modalOverlay')) closeModal(); });
+
+function selectVehicle(el) { document.querySelectorAll('.vehicle-option').forEach(v => v.classList.remove('selected')); el.classList.add('selected'); }
+function selectRec(el, t) { document.querySelectorAll('.rec-option').forEach(r => r.className='rec-option'); el.classList.add('sel-'+t); }
+function selectSev(el, t) { document.querySelectorAll('.sev-btn').forEach(b => b.className='sev-btn'); el.classList.add('ac-'+t); }
+function setRating(n) { currentRating=n; document.querySelectorAll('.star-btn').forEach((b,i) => b.classList.toggle('active', i<n)); }
+
+function submitReport() {
+  const loc = document.getElementById('locationInput').value.trim();
+  if (!loc) { showToast('Please enter a location'); return; }
+  closeModal();
+  showToast('Report submitted — thank you!');
+  document.getElementById('locationInput').value = '';
+  document.getElementById('descInput').value = '';
+  currentRating = 0;
+  document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.vehicle-option').forEach(v => v.classList.remove('selected'));
+  document.querySelectorAll('.rec-option').forEach(r => r.className='rec-option');
+  document.querySelectorAll('.sev-btn').forEach(b => b.className='sev-btn');
+}
+
+// ─── CHARTS ──────────────────────────────────────────────────────────────────
+function renderCharts() {
+  const states = [
+    {s:'Michigan',v:89},{s:'New Jersey',v:82},{s:'Rhode Island',v:78},
+    {s:'Maryland',v:74},{s:'West Virginia',v:71},{s:'California',v:68},
+  ];
+  document.getElementById('stateChart').innerHTML = states.map(d=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:11px">
+      <div style="width:82px;color:var(--muted);text-align:right;flex-shrink:0">${d.s}</div>
+      <div style="flex:1;background:var(--surface);border-radius:4px;height:13px;overflow:hidden">
+        <div style="width:${d.v}%;height:100%;background:linear-gradient(90deg,var(--red),var(--yellow));border-radius:4px;opacity:.8"></div>
+      </div>
+      <div style="width:22px;font-family:'DM Mono',monospace;font-weight:600">${d.v}</div>
+    </div>`).join('');
+
+  const vehicles = [
+    {t:'Sedan / Low',p:38,c:'var(--blue)'},{t:'Sports Car',p:24,c:'var(--purple)'},
+    {t:'4x4 / Truck',p:21,c:'var(--green)'},{t:'SUV / CUV',p:12,c:'var(--yellow)'},
+    {t:'Motorcycle',p:5,c:'var(--accent2)'},
+  ];
+  document.getElementById('vehicleChart').innerHTML = vehicles.map(d=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:11px">
+      <div style="width:82px;color:var(--muted);text-align:right;flex-shrink:0">${d.t}</div>
+      <div style="flex:1;background:var(--surface);border-radius:4px;height:13px;overflow:hidden">
+        <div style="width:${d.p}%;height:100%;background:${d.c};border-radius:4px;opacity:.75"></div>
+      </div>
+      <div style="width:28px;font-family:'DM Mono',monospace;font-weight:600">${d.p}%</div>
+    </div>`).join('');
+}
+
+// ─── SIDEBAR TOGGLE ──────────────────────────────────────────────────────────
+let sidebarOpen = true;
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  const sb = document.querySelector('.sidebar');
+  const btn = document.getElementById('sidebarToggle');
+  sb.classList.toggle('collapsed', !sidebarOpen);
+  btn.innerHTML = sidebarOpen ? '&#8249;' : '&#8250;';
+  btn.title = sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar';
+  if (typeof google !== 'undefined' && map) {
+    setTimeout(() => google.maps.event.trigger(map, 'resize'), 300);
+  }
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+
+<script async
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAysVE-kwgopi6ITXML6MfyS-XbHJZE4g8&libraries=places,visualization&callback=initMap">
+</script>
+</body>
+</html>
